@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Football Stats — Player Comparison</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg: #080810;
+  --surface: #10101c;
+  --card: #16162a;
+  --border: #252540;
+  --text: #e8e8f0;
+  --text-dim: #6060a0;
+  --text-mid: #9090c0;
+  --p1: #f0c040; /* gold */
+  --p2: #40c0f0; /* cyan */
+  --p3: #f04060; /* red */
+  --p4: #60f080; /* green */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
+
+/* ── HEADER ── */
+.header {
+  padding: 32px 40px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  background: linear-gradient(135deg, #080810 0%, #100820 100%);
+}
+.header-title { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 2px; color: var(--text); }
+.header-title span { color: var(--p1); }
+.header-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); letter-spacing: 2px; margin-top: 4px; }
+
+/* ── PLAYER SLOTS ── */
+.players-bar {
+  display: flex; gap: 12px; padding: 20px 40px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.player-slot {
+  flex: 1; min-width: 200px; max-width: 280px;
+  border: 1px dashed var(--border); border-radius: 8px;
+  padding: 12px 16px; cursor: pointer; transition: all 0.2s;
+  position: relative;
+}
+.player-slot:hover { border-color: var(--p1); }
+.player-slot.filled { border-style: solid; cursor: default; }
+.player-slot.p1 { border-color: var(--p1); background: rgba(240,192,64,0.05); }
+.player-slot.p2 { border-color: var(--p2); background: rgba(64,192,240,0.05); }
+.player-slot.p3 { border-color: var(--p3); background: rgba(240,64,96,0.05); }
+.player-slot.p4 { border-color: var(--p4); background: rgba(96,240,128,0.05); }
+.slot-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 1.5px; margin-bottom: 6px; }
+.slot-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.slot-stats { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+.slot-empty-hint { font-size: 12px; color: var(--text-dim); }
+.slot-remove {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 2px;
+}
+.slot-remove:hover { color: var(--p3); }
+.slot-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle;
+}
+.p1 .slot-dot { background: var(--p1); }
+.p2 .slot-dot { background: var(--p2); }
+.p3 .slot-dot { background: var(--p3); }
+.p4 .slot-dot { background: var(--p4); }
+
+/* ── CONTROLS BAR ── */
+.controls-bar {
+  display: flex; gap: 12px; padding: 16px 40px; align-items: center; flex-wrap: wrap;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.ctrl-group { display: flex; gap: 4px; }
+.ctrl-btn {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1px;
+  background: none; border: 1px solid var(--border); color: var(--text-dim);
+  padding: 7px 14px; border-radius: 4px; cursor: pointer; transition: all 0.15s;
+  text-transform: uppercase;
+}
+.ctrl-btn:hover { color: var(--text); border-color: var(--text-mid); }
+.ctrl-btn.active { background: var(--p1); border-color: var(--p1); color: #000; font-weight: 700; }
+.ctrl-sep { width: 1px; background: var(--border); margin: 0 4px; }
+.ctrl-label { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+
+/* ── MAIN CONTENT ── */
+.main { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+.section-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--text);
+  letter-spacing: 1px; margin-bottom: 20px;
+}
+
+/* ── CHART ── */
+.chart-wrap { margin-bottom: 40px; }
+.chart-title { font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; }
+.bar-area {
+  position: relative; background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 16px 40px;
+  overflow-x: auto;
+}
+.bars-canvas {
+  display: flex; align-items: flex-end; gap: 2px;
+  min-height: 200px; height: 220px;
+  position: relative;
+}
+/* grid lines */
+.bars-canvas::before {
+  content:''; position:absolute; inset:0;
+  background: repeating-linear-gradient(to bottom,
+    transparent, transparent calc(25% - 1px),
+    var(--border) calc(25% - 1px), var(--border) 25%
+  );
+  pointer-events:none;
+}
+.bar-group {
+  flex: 1; min-width: 18px; max-width: 60px;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-end; height: 100%; gap: 1px;
+  cursor: pointer; position: relative;
+}
+.bar-group:hover .bar-segment { filter: brightness(1.3); }
+.bar-group:hover .bar-group-label { color: var(--text); }
+.bar-segment {
+  width: 80%; max-width: 20px; border-radius: 2px 2px 0 0;
+  transition: height 0.5s ease, filter 0.15s;
+  min-height: 2px;
+}
+.bar-group-label {
+  position: absolute; bottom: -24px;
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: var(--text-dim); white-space: nowrap;
+  transform: rotate(-45deg) translateX(-8px);
+  transform-origin: top left;
+}
+.bar-tooltip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 6px 10px; font-size: 11px;
+  font-family: 'JetBrains Mono', monospace; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 10;
+  color: var(--text);
+}
+.bar-group:hover .bar-tooltip { opacity: 1; }
+
+/* ── LEGEND ── */
+.legend { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
+.legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-mid); }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+/* ── SUMMARY TABLE ── */
+.summary-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px; margin-bottom: 40px;
+}
+.summary-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px 20px;
+}
+.summary-card-name { font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+.summary-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.summary-stat { text-align: center; }
+.summary-stat-num { font-family: 'Bebas Neue', sans-serif; font-size: 28px; line-height: 1; }
+.summary-stat-label { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; }
+
+/* ── UPLOAD MODAL ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 32px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+  transform: translateY(20px); transition: transform 0.2s;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; margin-bottom: 6px; }
+.modal-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 24px; }
+.modal-close {
+  float: right; background: none; border: none; color: var(--text-dim);
+  font-size: 22px; cursor: pointer; margin-top: -4px;
+}
+.modal-close:hover { color: var(--text); }
+
+.field-label { font-size: 12px; color: var(--text-mid); margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
+.field-input {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: 10px 14px; border-radius: 6px; font-size: 14px;
+  font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.15s;
+  margin-bottom: 16px;
+}
+.field-input:focus { border-color: var(--p1); }
+
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: 8px; padding: 32px 24px;
+  text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 16px;
+}
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--p1); background: rgba(240,192,64,0.05); }
+.drop-icon { font-size: 36px; margin-bottom: 10px; }
+.drop-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.drop-sub { font-size: 12px; color: var(--text-dim); }
+
+.format-hint {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px 16px; margin-bottom: 16px; font-size: 12px; color: var(--text-dim);
+  line-height: 1.6;
+}
+.format-hint code { color: var(--p1); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+.modal-or { text-align: center; color: var(--text-dim); font-size: 12px; margin: 16px 0; position: relative; }
+.modal-or::before, .modal-or::after {
+  content: ''; position: absolute; top: 50%; width: 45%; height: 1px; background: var(--border);
+}
+.modal-or::before { left: 0; } .modal-or::after { right: 0; }
+
+textarea.field-input { min-height: 120px; resize: vertical; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+.btn-primary {
+  width: 100%; padding: 12px; background: var(--p1); border: none; border-radius: 6px;
+  color: #000; font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity 0.15s;
+  font-family: 'Inter', sans-serif;
+}
+.btn-primary:hover { opacity: 0.85; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.parse-status { font-size: 12px; margin-top: 8px; min-height: 18px; font-family: 'JetBrains Mono', monospace; }
+.parse-status.ok { color: var(--p4); }
+.parse-status.err { color: var(--p3); }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center; padding: 80px 40px; color: var(--text-dim);
+}
+.empty-icon { font-size: 64px; margin-bottom: 20px; }
+.empty-title { font-family: 'Bebas Neue', sans-serif; font-size: 28px; color: var(--text-mid); margin-bottom: 8px; }
+.empty-sub { font-size: 14px; line-height: 1.6; }
+.empty-btn {
+  margin-top: 24px; display: inline-block; padding: 12px 28px;
+  background: var(--p1); color: #000; border-radius: 6px; font-weight: 700;
+  cursor: pointer; border: none; font-size: 14px; font-family: 'Inter', sans-serif;
+}
+
+/* ── TABS ── */
+.view-tabs {
+  display: flex; gap: 0; margin-bottom: 28px; border-bottom: 1px solid var(--border);
+}
+.view-tab {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--text-dim); background: none; border: none;
+  border-bottom: 2px solid transparent; padding: 12px 20px; cursor: pointer; transition: all 0.15s;
+}
+.view-tab:hover { color: var(--text); }
+.view-tab.active { color: var(--p1); border-bottom-color: var(--p1); }
+
+/* responsive */
+@media (max-width: 600px) {
+  .header, .players-bar, .controls-bar, .main { padding-left: 16px; padding-right: 16px; }
+  .player-slot { min-width: 150px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="header-title">Football <span>Stats</span></div>
+    <div class="header-sub">Player Comparison Dashboard · Up to 4 players</div>
+  </div>
+</div>
+
+<!-- PLAYER SLOTS -->
+<div class="players-bar" id="playersBar">
+  <div class="player-slot" id="slot0" onclick="openModal(0)">
+    <div class="slot-label">ИГРОК 1</div>
+    <div class="slot-empty-hint">+ Добавить игрока</div>
+  </div>
+  <div class="player-slot" id="slot1" onclick="openModal(1)">
+    <div class="slot-label">ИГРОК 2</div>
+    <div class="slot-empty-hint">+ Добавить игрока</div>
+  </div>
+  <div class="player-slot" id="slot2" onclick="openModal(2)">
+    <div class="slot-label">ИГРОК 3</div>
+    <div class="slot-empty-hint">+ Добавить игрока</div>
+  </div>
+  <div class="player-slot" id="slot3" onclick="openModal(3)">
+    <div class="slot-label">ИГРОК 4</div>
+    <div class="slot-empty-hint">+ Добавить игрока</div>
+  </div>
+</div>
+
+<!-- CONTROLS BAR -->
+<div class="controls-bar">
+  <div class="ctrl-label">МЕТРИКА:</div>
+  <div class="ctrl-group">
+    <button class="ctrl-btn active" onclick="setMetric('goals',this)">Голы</button>
+    <button class="ctrl-btn" onclick="setMetric('assists',this)">Ассисты</button>
+    <button class="ctrl-btn" onclick="setMetric('ga',this)">Г+А</button>
+    <button class="ctrl-btn" onclick="setMetric('minutes',this)">Минуты</button>
+    <button class="ctrl-btn" onclick="setMetric('matches',this)">Матчи</button>
+  </div>
+  <div class="ctrl-sep"></div>
+  <div class="ctrl-label">РАЗРЕЗ:</div>
+  <div class="ctrl-group">
+    <button class="ctrl-btn active" id="btnAge" onclick="setView('age',this)">По возрасту</button>
+    <button class="ctrl-btn" id="btnYear" onclick="setView('year',this)">По годам</button>
+    <button class="ctrl-btn" id="btnMonth" onclick="setView('month',this)">По месяцам</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="mainArea">
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">📊</div>
+    <div class="empty-title">Добавь игроков для сравнения</div>
+    <div class="empty-sub">Загрузи данные из Excel, TXT, CSV или PDF<br>для до 4 игроков одновременно</div>
+    <button class="empty-btn" onclick="openModal(0)">+ Добавить первого игрока</button>
+  </div>
+
+  <div id="chartArea" style="display:none">
+    <!-- Summary cards -->
+    <div class="summary-grid" id="summaryGrid"></div>
+
+    <!-- Chart -->
+    <div class="chart-wrap">
+      <div class="legend" id="legend"></div>
+      <div class="chart-title" id="chartTitle">ГОЛЫ ПО ВОЗРАСТУ</div>
+      <div class="bar-area">
+        <div class="bars-canvas" id="barsCanvas"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- UPLOAD MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" id="modalTitle">Добавить игрока</div>
+    <div class="modal-sub">Загрузи файл или вставь данные вручную</div>
+
+    <div class="field-label">ИМЯ ИГРОКА</div>
+    <input class="field-input" id="playerName" placeholder="Cristiano Ronaldo" />
+
+    <div class="field-label">ДАТА РОЖДЕНИЯ (для расчёта возраста)</div>
+    <input class="field-input" id="playerBday" type="date" />
+
+    <div class="field-label">ЗАГРУЗИТЬ ФАЙЛ</div>
+    <div class="drop-zone" id="dropZone">
+      <div class="drop-icon">📂</div>
+      <div class="drop-title">Перетащи файл сюда</div>
+      <div class="drop-sub">Excel (.xlsx, .xls), CSV, TXT или PDF</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.txt,.pdf" style="display:none" onchange="handleFile(this.files[0])">
+    </div>
+    <button class="ctrl-btn" style="width:100%;margin-bottom:16px" onclick="document.getElementById('fileInput').click()">Выбрать файл</button>
+
+    <div class="format-hint">
+      <strong>Поддерживаемые форматы:</strong><br>
+      • <strong>Transfermarkt PDF/Excel</strong> — загружай напрямую<br>
+      • <strong>CSV/TXT</strong>: <code>17.06.2006, 1, 0, 90</code> (дата, голы, ассисты, минуты)<br>
+      • <strong>Ручной ввод</strong>: одна строка = один матч<br><br>
+      <strong>Excel колонки:</strong> <code>Date | Goals | Assists | Minutes</code>
+    </div>
+
+    <div class="modal-or">или введи вручную</div>
+
+    <div class="field-label">ДАННЫЕ (дата, голы, ассисты, минуты)</div>
+    <textarea class="field-input" id="manualData" placeholder="17.06.2006, 1, 0, 90
+21.06.2010, 1, 1, 90
+16.06.2018, 3, 0, 90"></textarea>
+
+    <div class="parse-status" id="parseStatus"></div>
+    <button class="btn-primary" onclick="confirmPlayer()">Добавить игрока</button>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+const COLORS = ['--p1','--p2','--p3','--p4'];
+const COLOR_HEX = ['#f0c040','#40c0f0','#f04060','#60f080'];
+const COLOR_NAMES = ['p1','p2','p3','p4'];
+let players = [null, null, null, null];
+let currentSlot = 0;
+let currentMetric = 'goals';
+let currentView = 'age';
+let parsedRows = [];
+
+const MONTHS_RU = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+
+// ── LOCALSTORAGE ──
+function saveState() {
+  try {
+    const data = players.map(p => {
+      if (!p) return null;
+      return {
+        name: p.name,
+        bday: p.bday ? p.bday.toISOString() : null,
+        color: p.color,
+        colorClass: p.colorClass,
+        rows: p.rows.map(r => ({
+          date: r.date.toISOString(),
+          goals: r.goals,
+          assists: r.assists,
+          minutes: r.minutes,
+        }))
+      };
+    });
+    localStorage.setItem('footballStats_players', JSON.stringify(data));
+  } catch(e) { console.warn('Save failed', e); }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem('footballStats_players');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    data.forEach((p, i) => {
+      if (!p) return;
+      players[i] = {
+        name: p.name,
+        bday: p.bday ? new Date(p.bday) : null,
+        color: p.color,
+        colorClass: p.colorClass,
+        rows: p.rows.map(r => ({
+          date: new Date(r.date),
+          goals: r.goals,
+          assists: r.assists,
+          minutes: r.minutes,
+        }))
+      };
+      updateSlot(i);
+    });
+    renderAll();
+  } catch(e) { console.warn('Load failed', e); }
+}
+
+// ── MODAL ──
+function openModal(slot) {
+  currentSlot = slot;
+  document.getElementById('modalTitle').textContent = `Игрок ${slot + 1}`;
+  document.getElementById('playerName').value = '';
+  document.getElementById('playerBday').value = '';
+  document.getElementById('manualData').value = '';
+  document.getElementById('parseStatus').textContent = '';
+  document.getElementById('parseStatus').className = 'parse-status';
+  parsedRows = [];
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// ── DRAG & DROP ──
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+// ── FILE PARSING ──
+async function handleFile(file) {
+  if (!file) return;
+  const name = file.name.toLowerCase();
+  setStatus('Парсинг...', '');
+  try {
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      await parseExcel(file);
+    } else if (name.endsWith('.pdf')) {
+      await parsePDFFile(file);
+    } else {
+      const text = await file.text();
+      parseText(text);
+    }
+    if (!document.getElementById('playerName').value) {
+      document.getElementById('playerName').value = file.name.replace(/\.[^/.]+$/, '');
+    }
+  } catch(e) {
+    setStatus('Ошибка: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+// ── EXCEL PARSER ──
+async function parseExcel(file) {
+  const ab = await file.arrayBuffer();
+  const wb = XLSX.read(ab, { type: 'array', cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+
+  // Try Transfermarkt-style first (multi-row per match)
+  const tmRows = parseTransfermarktExcel(rows);
+  if (tmRows.length > 0) {
+    parsedRows = tmRows;
+    setStatus(`✓ Загружено ${parsedRows.length} матчей (Transfermarkt формат)`, 'ok');
+    return;
+  }
+
+  // Generic: find header row
+  parsedRows = [];
+  let dateCol = -1, goalCol = -1, assistCol = -1, minCol = -1;
+  for (let r = 0; r < Math.min(5, rows.length); r++) {
+    const row = rows[r].map(c => String(c).toLowerCase().trim());
+    row.forEach((cell, i) => {
+      if (/дата|date|datum/.test(cell)) dateCol = i;
+      if (/гол|goal|tor/.test(cell) && !/ассист/.test(cell)) goalCol = i;
+      if (/ассист|assist/.test(cell)) assistCol = i;
+      if (/минут|minute|min/.test(cell)) minCol = i;
+    });
+    if (dateCol >= 0 && goalCol >= 0) break;
+  }
+
+  for (const row of rows) {
+    if (!row[dateCol]) continue;
+    const r = parseRow(row[dateCol], row[goalCol], row[assistCol], row[minCol]);
+    if (r) parsedRows.push(r);
+  }
+  setStatus(`✓ Загружено ${parsedRows.length} матчей`, parsedRows.length > 0 ? 'ok' : 'err');
+}
+
+// ── TRANSFERMARKT EXCEL FORMAT ──
+// Format: rows grouped by match. Match header has date, score etc.
+// Goal rows below have: minute, score-made, type, assist
+function parseTransfermarktExcel(rows) {
+  const result = [];
+  let currentDate = null;
+  let currentMinutes = 90;
+  let matchGoals = 0, matchAssists = 0;
+  let inMatch = false;
+  const dateRe = /(\d{2})[.\/-](\d{2})[.\/-](\d{2,4})/;
+
+  // Detect Transfermarkt by looking for "Сезон" or "Season" header
+  const hasSeason = rows.some(r => r.some(c => /^(Сезон|Season)\s+\d{2}\/\d{2}/.test(String(c).trim())));
+  if (!hasSeason) return [];
+
+  // Strategy: find rows with dates -> that's a match row
+  // Rows without dates but with minute pattern -> goal rows for that match
+  const minuteRe = /^(\d{1,3})\+?(\d*)'?$/;
+
+  // First pass: identify all match rows (have a date) and goal rows (have minute)
+  // We accumulate goals/assists per match date
+  const matchMap = {}; // date string -> {goals, assists, minutes, date}
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowStr = row.map(c => String(c || '').trim());
+
+    // Look for date in any cell
+    let foundDate = null;
+    let foundMinutes = 90;
+    for (const cell of rowStr) {
+      const dm = cell.match(dateRe);
+      if (dm) { foundDate = cell; break; }
+    }
+
+    // Look for minutes in the row
+    let foundMinute = null;
+    for (const cell of rowStr) {
+      const mm = cell.replace("'", '').match(/^(\d{1,3})(\+\d+)?$/);
+      if (mm) {
+        const mins = parseInt(mm[1]);
+        if (mins >= 1 && mins <= 130) { foundMinute = mins; break; }
+      }
+    }
+
+    if (foundDate) {
+      currentDate = foundDate;
+      // Extract minutes played from row (look for 90, 120, 45+N etc)
+      let mins = 90;
+      for (const cell of rowStr) {
+        const m = cell.match(/^(\d{2,3})[\+']?/);
+        if (m) {
+          const v = parseInt(m[1]);
+          if (v >= 45 && v <= 130) { mins = v; break; }
+        }
+      }
+      if (!matchMap[currentDate]) {
+        const d = parseDateStr(currentDate);
+        if (d) matchMap[currentDate] = { date: d, goals: 0, assists: 0, minutes: mins };
+      }
+    }
+
+    // Goal row detection: has a minute value AND assist info OR "Тип гола"/"Type"
+    // In Transfermarkt goals PDF: minute | score | type | assist
+    if (!foundDate && currentDate && matchMap[currentDate]) {
+      // Check if this looks like a goal row
+      // Has at least one minute-like value
+      const hasMinute = rowStr.some(c => /^\d{1,3}('\+?\d*)?'?$/.test(c) && parseInt(c) <= 130 && parseInt(c) >= 1);
+      const hasScore = rowStr.some(c => /^\d:\d$/.test(c) || /^\d+:\d+$/.test(c));
+
+      if (hasMinute && hasScore) {
+        matchMap[currentDate].goals += 1;
+        // Check for assist (last non-empty cell or cell after type)
+        const lastNonEmpty = [...rowStr].reverse().find(c => c && c.length > 0 && !/^\d/.test(c));
+        if (lastNonEmpty && lastNonEmpty !== rowStr[0]) {
+          matchMap[currentDate].assists += 0; // assists tracked separately below
+        }
+      }
+    }
+  }
+
+  return Object.values(matchMap).filter(m => m.date);
+}
+
+// ── PDF PARSER ──
+async function parsePDFFile(file) {
+  const ab = await file.arrayBuffer();
+  const bytes = new Uint8Array(ab);
+
+  // Extract raw text from PDF
+  const text = extractRawPDFText(bytes);
+
+  // Try Transfermarkt goals page format
+  const rows = parseTransfermarktGoalsPDF(text);
+  if (rows.length > 0) {
+    parsedRows = rows;
+    setStatus(`✓ Извлечено ${parsedRows.length} матчей из PDF`, 'ok');
+    return;
+  }
+
+  // Fall back to generic
+  parseText(text);
+}
+
+function extractRawPDFText(bytes) {
+  // Extract text from PDF content streams
+  const dec = new TextDecoder('latin1');
+  const full = dec.decode(bytes);
+  let text = '';
+
+  // Extract text between BT/ET markers (PDF text objects)
+  const btRe = /BT([\s\S]*?)ET/g;
+  let m;
+  while ((m = btRe.exec(full)) !== null) {
+    const block = m[1];
+    // Extract strings: (text) Tj or [(text)] TJ
+    const strRe = /\(([^)]*)\)/g;
+    let sm;
+    while ((sm = strRe.exec(block)) !== null) {
+      text += sm[1] + ' ';
+    }
+    text += '\n';
+  }
+
+  // Also try direct string extraction
+  const strRe2 = /\(([^)]{1,150})\)/g;
+  while ((m = strRe2.exec(full)) !== null) {
+    const s = m[1];
+    if (/\d{2}\.\d{2}\.\d{2}/.test(s) || /^\d+$/.test(s.trim())) {
+      text += s + '\n';
+    }
+  }
+
+  return text;
+}
+
+// Parse Transfermarkt "All Goals" PDF
+// Format per goal: [Minute] [Score] [Type] [Assist]
+// Grouped by match which has: [Tour] [Date] [H/A] [For] [Against] [Score] [Role]
+function parseTransfermarktGoalsPDF(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const result = [];
+  const dateRe = /^(\d{2})\.(\d{2})\.(\d{2,4})$/;
+  const minuteRe = /^(\d{1,3})(\+\d+)?['\u2019]?$/;
+  const scoreRe = /^\d+:\d+$/;
+
+  let currentDate = null;
+  let currentMatchGoals = 0;
+  let currentMatchAssists = 0;
+  let currentMinutes = 90;
+  const matchMap = {};
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Date token
+    if (dateRe.test(line)) {
+      currentDate = line;
+      if (!matchMap[line]) {
+        const d = parseDateStr(line);
+        if (d) matchMap[line] = { date: d, goals: 0, assists: 0, minutes: 90 };
+      }
+      continue;
+    }
+
+    // Minutes played (90', 120', 45' etc at end of match row)
+    if (currentDate && matchMap[currentDate]) {
+      const minClean = line.replace(/['\u2019]/g, '');
+      if (/^\d{2,3}(\+\d+)?$/.test(minClean)) {
+        const mins = parseInt(minClean);
+        if (mins >= 45 && mins <= 130) {
+          matchMap[currentDate].minutes = mins;
+        }
+        // Also detect goal minute (1-44 or similar)
+        if (mins >= 1 && mins < 45) {
+          // could be a goal minute
+        }
+      }
+
+      // Score made "2:0" style = goal indicator
+      if (scoreRe.test(line) && i > 0) {
+        // Check if previous token was a minute
+        const prev = lines[i-1]?.replace(/['\u2019]/g, '');
+        if (prev && /^\d{1,3}(\+\d+)?$/.test(prev)) {
+          matchMap[currentDate].goals += 1;
+        }
+      }
+    }
+  }
+
+  return Object.values(matchMap).filter(m => m.date && (m.goals > 0 || m.minutes > 0));
+}
+
+// ── GENERIC TEXT PARSER ──
+// Handles: "DD.MM.YYYY, goals, assists, minutes" per line
+// Also handles Transfermarkt stats export format
+function parseText(text) {
+  parsedRows = [];
+
+  // First try: detect Transfermarkt stats format
+  // Key pattern: date followed by score pattern, then role (ПВ/ЛВ/ЦН/ОН)
+  const tmRows = parseTransfermarktStatsText(text);
+  if (tmRows.length > 0) {
+    parsedRows = tmRows;
+    setStatus(`✓ ${parsedRows.length} матчей (Transfermarkt статистика)`, 'ok');
+    return;
+  }
+
+  // Generic CSV/TSV format
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t || t.startsWith('#') || t.startsWith('//')) continue;
+    const parts = t.split(/[\t,;|]+/).map(s => s.trim());
+    if (parts.length < 2) continue;
+    const r = parseRow(parts[0], parts[1], parts[2], parts[3]);
+    if (r) parsedRows.push(r);
+  }
+
+  if (parsedRows.length > 0) {
+    setStatus(`✓ ${parsedRows.length} матчей загружено`, 'ok');
+  } else {
+    setStatus('Не удалось распознать данные. Используй формат: Дата, Голы, Ассисты, Минуты', 'err');
+  }
+}
+
+// Parse Transfermarkt match stats text (from PDF or copy-paste)
+// Detect lines with: date + score + role (ПВ/ЛВ/ЦН/ОН) + goals + assists + minutes
+function parseTransfermarktStatsText(text) {
+  const rows = [];
+  const lines = text.split('\n');
+  const dateRe = /(\d{2}\.\d{2}\.\d{2,4})/;
+  const roleRe = /\b(ПВ|ЛВ|ЦН|ОН)\b/;
+  const numRe = /\b(\d+)\b/g;
+  const minuteRe = /(\d{1,3})\+?\d*['′']/g;
+
+  for (const line of lines) {
+    const dateM = line.match(dateRe);
+    const roleM = line.match(roleRe);
+    if (!dateM || !roleM) continue;
+
+    const date = parseDateStr(dateM[1]);
+    if (!date) continue;
+
+    // After role: first number = goals, second = assists
+    const afterRole = line.slice(line.indexOf(roleM[0]) + roleM[0].length);
+    const nums = [...afterRole.matchAll(/\b(\d+)\b/g)].map(m => parseInt(m[1]));
+
+    let goals = 0, assists = 0, minutes = 90;
+
+    // Goals: first num <= 10
+    // Assists: second num <= 10
+    // Minutes: num > 10 (45-150 range) — look for minute marker with apostrophe
+    const minMatches = [...line.matchAll(/(\d{1,3})\+?\d*['\u2019\u02BC]/g)];
+    if (minMatches.length > 0) {
+      const lastMin = parseInt(minMatches[minMatches.length - 1][1]);
+      if (lastMin >= 30 && lastMin <= 130) minutes = lastMin;
+    }
+
+    if (nums.length >= 1 && nums[0] <= 10) goals = nums[0];
+    if (nums.length >= 2 && nums[1] <= 10) assists = nums[1];
+
+    rows.push({ date, goals, assists, minutes });
+  }
+
+  return rows;
+}
+
+// ── CORE PARSERS ──
+function parseRow(dateStr, goalsStr, assistsStr, minutesStr) {
+  if (!dateStr) return null;
+  const date = parseDateStr(String(dateStr).trim());
+  if (!date) return null;
+  const goals = Math.max(0, parseInt(goalsStr) || 0);
+  const assists = Math.max(0, parseInt(assistsStr) || 0);
+  let minutes = parseInt(minutesStr) || 90;
+  if (minutes <= 0 || minutes > 180) minutes = 90;
+  return { date, goals, assists, minutes };
+}
+
+function parseDateStr(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  let m;
+  // DD.MM.YY or DD.MM.YYYY
+  m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if (m) {
+    let y = parseInt(m[3]); if (y < 100) y += 2000;
+    return new Date(y, parseInt(m[2])-1, parseInt(m[1]));
+  }
+  // YYYY-MM-DD
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
+  // DD/MM/YYYY
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) {
+    let y = parseInt(m[3]); if (y < 100) y += 2000;
+    return new Date(y, parseInt(m[2])-1, parseInt(m[1]));
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('parseStatus');
+  el.textContent = msg;
+  el.className = 'parse-status' + (cls ? ' ' + cls : '');
+}
+
+// ── CONFIRM PLAYER ──
+function confirmPlayer() {
+  const manual = document.getElementById('manualData').value.trim();
+  if (manual && parsedRows.length === 0) {
+    parseText(manual);
+  }
+
+  if (parsedRows.length === 0) {
+    setStatus('Нет данных — загрузи файл или введи вручную', 'err');
+    return;
+  }
+
+  const name = document.getElementById('playerName').value.trim() || `Игрок ${currentSlot + 1}`;
+  const bdayVal = document.getElementById('playerBday').value;
+  const bday = bdayVal ? new Date(bdayVal) : null;
+
+  players[currentSlot] = {
+    name, bday,
+    rows: [...parsedRows],
+    color: COLOR_HEX[currentSlot],
+    colorClass: COLOR_NAMES[currentSlot],
+  };
+
+  closeModal();
+  updateSlot(currentSlot);
+  saveState();
+  renderAll();
+}
+
+function updateSlot(i) {
+  const p = players[i];
+  const slot = document.getElementById(`slot${i}`);
+  const labels = ['ИГРОК 1','ИГРОК 2','ИГРОК 3','ИГРОК 4'];
+  if (!p) {
+    slot.className = 'player-slot';
+    slot.innerHTML = `<div class="slot-label">${labels[i]}</div><div class="slot-empty-hint">+ Добавить игрока</div>`;
+    slot.onclick = () => openModal(i);
+    return;
+  }
+  const totalGoals = p.rows.reduce((s,r) => s+r.goals, 0);
+  const totalAssists = p.rows.reduce((s,r) => s+r.assists, 0);
+  const totalMatches = p.rows.length;
+  slot.className = `player-slot filled ${p.colorClass}`;
+  slot.innerHTML = `
+    <button class="slot-remove" onclick="removePlayer(${i});event.stopPropagation()">×</button>
+    <div class="slot-label"><span class="slot-dot"></span>${labels[i]}</div>
+    <div class="slot-name">${p.name}</div>
+    <div class="slot-stats">${totalMatches} матчей · ${totalGoals}Г · ${totalAssists}А</div>
+  `;
+  slot.onclick = null;
+}
+
+function removePlayer(i) {
+  players[i] = null;
+  updateSlot(i);
+  saveState();
+  renderAll();
+}
+
+// ── CONTROLS ──
+function setMetric(m, btn) {
+  currentMetric = m;
+  document.querySelectorAll('.ctrl-group').forEach(g =>
+    g.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'))
+  );
+  btn.classList.add('active');
+  renderAll();
+}
+function setView(v, btn) {
+  currentView = v;
+  // Only deactivate view buttons (second group)
+  const groups = document.querySelectorAll('.ctrl-group');
+  if (groups[1]) groups[1].querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAll();
+}
+
+// ── RENDER ──
+function renderAll() {
+  const activePlayers = players.filter(Boolean);
+  const empty = document.getElementById('emptyState');
+  const chartArea = document.getElementById('chartArea');
+
+  if (activePlayers.length === 0) {
+    empty.style.display = ''; chartArea.style.display = 'none'; return;
+  }
+  empty.style.display = 'none'; chartArea.style.display = '';
+  renderSummary(activePlayers);
+  renderChart(activePlayers);
+}
+
+function metricLabel() {
+  return {goals:'Голы',assists:'Ассисты',ga:'Г+А',minutes:'Минуты',matches:'Матчи'}[currentMetric];
+}
+
+function getVal(row) {
+  if (currentMetric === 'goals') return row.goals;
+  if (currentMetric === 'assists') return row.assists;
+  if (currentMetric === 'ga') return row.goals + row.assists;
+  if (currentMetric === 'minutes') return row.minutes;
+  if (currentMetric === 'matches') return 1;
+  return 0;
+}
+
+function renderSummary(activePlayers) {
+  const grid = document.getElementById('summaryGrid');
+  grid.innerHTML = '';
+  for (const p of activePlayers) {
+    const totalG = p.rows.reduce((s,r) => s+r.goals, 0);
+    const totalA = p.rows.reduce((s,r) => s+r.assists, 0);
+    const totalM = p.rows.reduce((s,r) => s+r.minutes, 0);
+    const totalGames = p.rows.length;
+    const ga = totalG + totalA;
+    const mpg = totalG > 0 ? (totalGames/totalG).toFixed(1) : '—';
+    const card = document.createElement('div');
+    card.className = 'summary-card';
+    card.innerHTML = `
+      <div class="summary-card-name" style="color:${p.color}">● ${p.name}
+        ${p.bday ? `<span style="color:var(--text-dim);font-weight:400;font-size:11px"> · ${p.bday.toLocaleDateString('ru')}</span>` : ''}
+      </div>
+      <div class="summary-stats">
+        <div class="summary-stat">
+          <div class="summary-stat-num" style="color:${p.color}">${totalG}</div>
+          <div class="summary-stat-label">ГОЛЫ</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-stat-num" style="color:${p.color}">${totalA}</div>
+          <div class="summary-stat-label">АССИСТЫ</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-stat-num" style="color:${p.color}">${ga}</div>
+          <div class="summary-stat-label">Г+А</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-stat-num" style="color:${p.color}">${totalGames}</div>
+          <div class="summary-stat-label">МАТЧИ</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-stat-num" style="color:${p.color}">${Math.round(totalM/60)}ч</div>
+          <div class="summary-stat-label">МИНУТЫ</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-stat-num" style="color:${p.color}">${mpg}</div>
+          <div class="summary-stat-label">МАТ/ГОЛ</div>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+}
+
+function getAge(date, bday) {
+  if (!bday) return date.getFullYear();
+  let age = date.getFullYear() - bday.getFullYear();
+  const m = date.getMonth() - bday.getMonth();
+  if (m < 0 || (m === 0 && date.getDate() < bday.getDate())) age--;
+  return age;
+}
+
+function renderChart(activePlayers) {
+  const canvas = document.getElementById('barsCanvas');
+  const legend = document.getElementById('legend');
+  const title = document.getElementById('chartTitle');
+
+  const viewLabels = { age:'ПО ВОЗРАСТУ', year:'ПО ГОДАМ', month:'ПО МЕСЯЦАМ' };
+  title.textContent = `${metricLabel().toUpperCase()} ${viewLabels[currentView]}`;
+
+  legend.innerHTML = activePlayers.map(p =>
+    `<div class="legend-item"><div class="legend-dot" style="background:${p.color}"></div>${p.name}</div>`
+  ).join('');
+
+  let keyFn, labelFn, allKeys;
+
+  if (currentView === 'age') {
+    keyFn = (row, p) => p.bday ? getAge(row.date, p.bday) : row.date.getFullYear();
+    const keySets = activePlayers.map(p => new Set(p.rows.map(r => keyFn(r, p))));
+    const merged = new Set(keySets.flatMap(s => [...s]));
+    allKeys = [...merged].sort((a,b) => a-b);
+  } else if (currentView === 'year') {
+    keyFn = (row) => row.date.getFullYear();
+    const keySets = activePlayers.map(p => new Set(p.rows.map(r => keyFn(r))));
+    const merged = new Set(keySets.flatMap(s => [...s]));
+    allKeys = [...merged].sort((a,b) => a-b);
+  } else {
+    keyFn = (row) => row.date.getMonth();
+    allKeys = [0,1,2,3,4,5,6,7,8,9,10,11];
+  }
+
+  // Aggregate per player per key
+  const playerAgg = activePlayers.map(p => {
+    const map = {};
+    for (const row of p.rows) {
+      const key = keyFn(row, p);
+      map[key] = (map[key] || 0) + getVal(row);
+    }
+    return map;
+  });
+
+  const maxVal = Math.max(1, ...playerAgg.flatMap(m => allKeys.map(k => m[k] || 0)));
+
+  canvas.innerHTML = '';
+
+  for (const key of allKeys) {
+    const vals = playerAgg.map(m => m[key] || 0);
+    if (currentView !== 'month' && vals.every(v => v === 0)) continue;
+
+    const group = document.createElement('div');
+    group.className = 'bar-group';
+
+    const displayLabel = currentView === 'month'
+      ? MONTHS_RU[key]
+      : (currentView === 'age' ? key + 'л' : String(key).slice(2));
+
+    const tooltipLines = activePlayers.map((p, i) =>
+      `<span style="color:${p.color}">${p.name.split(' ')[0]}: ${vals[i]}</span>`
+    ).join('<br>');
+
+    const tip = document.createElement('div');
+    tip.className = 'bar-tooltip';
+    tip.style.cssText = 'min-width:100px;text-align:left';
+    tip.innerHTML = `<strong>${displayLabel}</strong><br>${tooltipLines}`;
+    group.appendChild(tip);
+
+    for (let i = 0; i < activePlayers.length; i++) {
+      const val = vals[i];
+      const h = val > 0 ? Math.max(3, (val / maxVal) * 100) : 0;
+      const bar = document.createElement('div');
+      bar.className = 'bar-segment';
+      bar.style.background = activePlayers[i].color;
+      bar.style.height = h + '%';
+      bar.style.opacity = val > 0 ? '0.85' : '0.08';
+      group.appendChild(bar);
+    }
+
+    const lbl = document.createElement('div');
+    lbl.className = 'bar-group-label';
+    lbl.textContent = displayLabel;
+    group.appendChild(lbl);
+    canvas.appendChild(group);
+  }
+}
+
+// ── INIT ──
+loadState();
+renderAll();
+
+
+
+</script>
+</body>
+</html>
